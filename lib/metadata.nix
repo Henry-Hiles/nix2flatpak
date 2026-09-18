@@ -39,6 +39,10 @@ let
       "devices=${joinPerms permissions.devices}")
     (lib.optionalString (permissions ? filesystems && permissions.filesystems != [])
       "filesystems=${joinPerms permissions.filesystems}")
+    (lib.optionalString (permissions ? talk-names && permissions.talk-names != [])
+      "talk-names=${joinPerms permissions.talk-names}")
+    (lib.optionalString (permissions ? own-names && permissions.own-names != [])
+      "own-names=${joinPerms permissions.own-names}")
   ];
 
   envLines = lib.mapAttrsToList (k: v: "${k}=${v}") extraEnv;
