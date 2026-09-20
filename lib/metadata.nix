@@ -43,6 +43,15 @@ let
 
   envLines = lib.mapAttrsToList (k: v: "${k}=${v}") extraEnv;
 
+  # "own" implies "talk" per the flatpak spec, so if a name appears in
+  # both lists, drop it from talk-names to avoid a conflicting duplicate key.
+  ownNames = permissions.own-names or [];
+  talkNames = lib.subtractLists ownNames (permissions.talk-names or []);
+
+  sessionBusPolicyLines =
+    (map (name: "${name}=own") ownNames)
+    ++ (map (name: "${name}=talk") talkNames);
+
 in writeText "flatpak-metadata-${appId}" (
   lib.concatStringsSep "\n" ([
     "[Application]"
@@ -54,6 +63,9 @@ in writeText "flatpak-metadata-${appId}" (
     "[Context]"
   ] ++ contextLines
     ++ [ "" ]
+    ++ lib.optionals (sessionBusPolicyLines != []) (
+      [ "[Session Bus Policy]" ] ++ sessionBusPolicyLines ++ [ "" ]
+    )
     ++ lib.optionals (envLines != []) (
       [ "[Environment]" ] ++ envLines ++ [ "" ]
     )
