@@ -10,7 +10,6 @@
 , command ? package.meta.mainProgram or (lib.getName package)
 , sdk ? null                 # default: inferred from runtime
 , permissions ? {}
-, desktopFile ? null
 , icon ? null
 , appdata ? null
 , appName ? null              # display name (default: read from .desktop Name=)
@@ -102,33 +101,20 @@ in stdenv.mkDerivation {
     mkdir -p flatpak-build/export/share/applications
     mkdir -p flatpak-build/export/share/icons
 
-    # Copy .desktop file — Flatpak requires it to be named ${appId}.desktop
-    ${if desktopFile != null then ''
-      cp ${desktopFile} flatpak-build/export/share/applications/${appId}.desktop
-    '' else ''
-      # Auto-detect from package — take the first .desktop file found
-      if [ -d "${package}/share/applications" ]; then
-        for f in ${package}/share/applications/*.desktop; do
-          if [ -f "$f" ]; then
-            cp "$f" flatpak-build/export/share/applications/${appId}.desktop
-            # Also copy to files/share for the app to find
-            mkdir -p flatpak-build/files/share/applications
-            cp "$f" flatpak-build/files/share/applications/${appId}.desktop
-            break
-          fi
-        done
-      fi
-    ''}
-
-    # Rewrite desktop files in export
-    for f in flatpak-build/export/share/applications/*.desktop; do
-      if [ -f "$f" ]; then
-        sed -i \
-          -e 's|^TryExec=/nix/store/[^/]*/bin/|TryExec=|' \
-          -e 's|^Exec=/nix/store/[^/]*/bin/|Exec=|' \
-          -e 's|^Icon=.*|Icon=${appId}|' \
-          "$f"
-      fi
+    # Flatpak only exports desktop files named $FLATPAK_ID.desktop,
+    # $FLATPAK_ID.foo.desktop or $FLATPAK_ID-foo.desktop
+    
+    for f in ${package}/share/applications/${appId}{,.*,-*}.desktop; do
+      [ -f "$f" ] || continue
+      name=$(basename "$f")
+      sed \
+        -e 's|^TryExec=/nix/store/[^/]*/bin/|TryExec=|' \
+        -e 's|^Exec=/nix/store/[^/]*/bin/|Exec=|' \
+        -e "s|^Icon=.*|Icon=${appId}|" \
+        "$f" > "flatpak-build/export/share/applications/$name"
+      install -D -m644 \
+        "flatpak-build/export/share/applications/$name" \
+        "flatpak-build/files/share/applications/$name"
     done
 
     # Copy icons
