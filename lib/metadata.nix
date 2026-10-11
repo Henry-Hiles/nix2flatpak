@@ -27,47 +27,28 @@ let
     "i686-linux" = "i386";
   };
   flatpakArch = archMap.${system} or (throw "Unsupported system: ${system}");
-
-  joinPerms = perms: lib.concatStringsSep ";" (perms ++ [ "" ]);
-
-  contextLines = lib.filter (s: s != "") [
-    (lib.optionalString (permissions ? share && permissions.share != [])
-      "shared=${joinPerms permissions.share}")
-    (lib.optionalString (permissions ? sockets && permissions.sockets != [])
-      "sockets=${joinPerms permissions.sockets}")
-    (lib.optionalString (permissions ? devices && permissions.devices != [])
-      "devices=${joinPerms permissions.devices}")
-    (lib.optionalString (permissions ? filesystems && permissions.filesystems != [])
-      "filesystems=${joinPerms permissions.filesystems}")
-  ];
-
-  envLines = lib.mapAttrsToList (k: v: "${k}=${v}") extraEnv;
-
-  # "own" implies "talk" per the flatpak spec, so if a name appears in
-  # both lists, drop it from talk-names to avoid a conflicting duplicate key.
-  ownNames = permissions.own-names or [];
-  talkNames = lib.subtractLists ownNames (permissions.talk-names or []);
-
-  sessionBusPolicyLines =
-    (map (name: "${name}=own") ownNames)
-    ++ (map (name: "${name}=talk") talkNames);
-
 in writeText "flatpak-metadata-${appId}" (
-  lib.concatStringsSep "\n" ([
-    "[Application]"
-    "name=${appId}"
-    "runtime=${runtimeName}/${flatpakArch}/${runtimeBranch}"
-    "sdk=${actualSdk}/${flatpakArch}/${runtimeBranch}"
-    "command=${command}"
-    ""
-    "[Context]"
-  ] ++ contextLines
-    ++ [ "" ]
-    ++ lib.optionals (sessionBusPolicyLines != []) (
-      [ "[Session Bus Policy]" ] ++ sessionBusPolicyLines ++ [ "" ]
-    )
-    ++ lib.optionals (envLines != []) (
-      [ "[Environment]" ] ++ envLines ++ [ "" ]
-    )
-  ) + "\n"
+  lib.generators.toINI {} ({
+    Application = {
+      name = appId;
+      command = command;
+      runtime = "${runtimeName}/${flatpakArch}/${runtimeBranch}";
+      sdk = "${actualSdk}/${flatpakArch}/${runtimeBranch}";
+    };
+
+    Context = {
+      shared = lib.concatStringsSep ";" permissions.share or [];
+      sockets = lib.concatStringsSep ";" permissions.sockets or [];
+      devices = lib.concatStringsSep ";" permissions.devices or [];
+      filesystems = lib.concatStringsSep ";" permissions.filesystems or [];
+    };
+
+    Environment = extraEnv;
+
+    # Apply own-names last to override any duplicate entries.
+    # This matches the Flatpak spec, which says "own" implies "talk".
+    "Session Bus Policy" = {}
+      // builtins.listToAttrs (map (name: ({ name = name; value = "talk"; })) permissions.talk-names or [])
+      // builtins.listToAttrs (map (name: ({ name = name; value = "own"; })) permissions.own-names or []);
+  })
 )
