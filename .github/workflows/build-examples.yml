@@ -24,4 +24,7 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@main
       - uses: DeterminateSystems/magic-nix-cache-action@main
       - name: Build ${{ matrix.example }}
-        run: nix build ./examples#${{ matrix.example }} --print-build-logs
+        run: |
+          nix build ./examples#${{ matrix.example }} \
+            --override-input nix2flatpak github:${{ github.repository }}/${{ github.sha }} \
+            --print-build-logs
